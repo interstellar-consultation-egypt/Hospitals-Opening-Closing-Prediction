@@ -1,0 +1,1458 @@
+---
+title: "ZPER - 2nd Competition (Predict Opening & Closing of Hospitals)"
+author: "Ali Ezzat"
+date: "September 15, 2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#setwd("~/R/ZPER - 2nd Competition (Predict Opening & Closing of Hospitals)")
+```
+
+
+-------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------
+
+
+## Overview
+
+The data for this competition contains information on 430 hospitals gathered from various data sets, including historical financial statements, geographical (location) information, number of sickbeds, etc., for hospitals in South Korea. The main goal of this competition is to predict closing numbers of given hospitals. More information about this competition (and its dataset) may be found at [this link](http://dacon.io/cpt2/10397).
+
+
+-------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------
+
+
+## First Look at the Data
+
+We start by loading the necessary packages.
+
+```{r, message=FALSE}
+library(tidyverse)
+library(ggcorrplot)
+```
+
+Next, we load the data from their respective files.
+
+```{r, message=FALSE}
+train_dta <- read_csv("train.csv", col_names = TRUE, trim_ws = TRUE)  # load training data
+test_dta  <- read_csv("test.csv",  col_names = TRUE, trim_ws = TRUE)  # load testing data
+```
+
+Let's inspect the data!
+
+```{r}
+# initial look at the data
+glimpse(train_dta)
+```
+
+On first glance, we observe a number of things:
+
+* A couple of the variables that are parsed as `integer` seem to be binary variables in actuality (i.e. `receivableL1`, `receivableL2`). *Note: This turns out to be incorrect later*.
+* Some nomimal textual variables are parsed as `character` (e.g. `ownerChange`, `instkind`). These need to be convert to type `factor`.
+* Multiple variables have `NA` values in them.
+* The variables, `employee1` and `employee2`, are both numerical variables while, at the same time, they were parsed as type `character`.
+
+The `NA` values problem seems to be the most annoying, so let's start with it. Let's see which variables have NA values in them and how frequently `NA` values occur in them.
+
+```{r}
+# show NA-containing variables and how frequently these NAs occur in each
+train_dta %>% 
+  map_df(is.na) %>%              # turn into an is.na() matrix
+  select_if(colSums(.) > 0) %>%  # get columns whose sum > 0  (i.e. variables which contain at least 1 NA value)
+  colSums() %>%                  # how many NA values do these variables contain?
+  t() %>% 
+  t()
+```
+
+44 out of the 58 variables have `NA` values in them. An interesting observation here is that most of them seem to specifically have `8` missing values. Let's try viewing rows that have `NA` values in them to see if they coincide in the same rows.
+
+```{r}
+# indices of rows (instances) containing NA values in them
+row_indices <- 
+  train_dta %>% 
+  map_df(is.na) %>%                              # turn into an is.na() matrix
+  transmute(rowHasNAvalue = rowSums(.) > 0) %>%  # create variable indicating whether the row has an NA value
+  as.matrix() %>%                                # convert into matrix (for the following 'which' function)
+  which()                                        # return indices of rows having NA values
+
+# display these row indices
+cat('#instances with NA values:', length(row_indices), '\n', row_indices)
+```
+
+In the training data, 24 instances (out of 301) that have NA values in them. Let's try viewing them using the `View()` function.
+
+```{r}
+train_dta[row_indices,] %>% View('train_data_NA_values')
+```
+
+Findings from the inspecting the output of the above command:
+
+* For variables containing *exactly* 8 missing values, they *always* coincide in the same row. That is, there are specifically 8 rows (instances) for which these variables *all* have the NA value. 
+* For variables containing *exactly* 8 missing values, they *all* belong to hospitals that have an `open` value in the target variable, `OC`. It is not the case that these hospitals are so new that such information is not available yet. Indeed some of these hospitals are quite old (as per the `openDate` variable).
+* For the remaining variables (i.e. `bedCount`, `instkind`, `employee1`, `employee2`, `ownerChange`), they are mostly scattered among the remaining 16 rows of `row_indices`.
+* `NA` values for `bedCount` *all* exist in hospitals having a `close` value in the target variable, `OC`. The same can be said for the `instkind` variable (which has only a single `NA` value).
+
+Before moving on, let's observe the `NA` values in the test data.
+
+```{r}
+# indices of rows (instances) containing NA values in them
+row_indices <- 
+  test_dta %>% 
+  select(-OC) %>% 
+  map_df(is.na) %>%                              # turn into an is.na() matrix
+  transmute(rowHasNAvalue = rowSums(.) > 0) %>%  # create variable indicating whether the row has an NA value
+  as.matrix() %>%                                # convert into matrix (for the following 'which' function)
+  which()                                        # return indices of rows having NA values
+
+# display these row indices
+cat('#instances with NA values:', length(row_indices), '\n', row_indices)
+```
+
+In the test data, 25 instances (out of 127) have NA values in them. Let's try viewing them using the `View()`
+
+```{r}
+test_dta[row_indices,] %>% View('test_data_NA_values')
+```
+
+A familiar pattern emerged which is: 
+The same variables whose `NA` values co-occurred together in the same rows in the training data did so in the test data as well (i.e. the ones that specifically had 8 `NA` values in the training data). These variables are in the columns numbered 8 to 55 (in both the training and test data).
+
+Before moving on, let's convert the types of the variables, `employee1` and `employee2`, as numeric ones.
+
+```{r warning=FALSE}
+train_dta$employee1 <- as.numeric(train_dta$employee1)
+train_dta$employee2 <- as.numeric(train_dta$employee2)
+test_dta$employee1  <- as.numeric(test_dta$employee1)
+test_dta$employee2  <- as.numeric(test_dta$employee2)
+glimpse(train_dta)
+```
+
+Now, it's time to dig deeper...
+
+-------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------
+
+
+## Exploratory Data Analysis
+
+Let's explore the variables more closely using some visualizations. We'll grab each and every one of the variables in the data and inspect them. Below are the variables that we will be looking at. A brief description for each of the variables in this dataset can be found in [this link](http://dacon.io/cpt2/10394).
+
+```{r}
+# the variables in the data
+train_dta %>% colnames()
+```
+
+Observe that there are 24 variables that are repeated twice, once with the suffix `1` and once with the suffix `2`. The ones with suffix `1` pertain to the fiscal year of 2017, whereas those with the suffix `2` pertain to the fiscal year of 2016.
+
+-------------------------------------------------------------------------------------------------
+
+### OC: Open/Close (Target Variable)
+
+The target variable is a binary indicator showing whether a hospital has closed since its inception or not.
+
+```{r}
+train_dta %>% 
+  select(OC) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+Okay. So we now know that the ratio between open and closed hospitals is around 20:1 in the training data. Of course, we must bear in mind that this ratio could be quite different in the test data.
+
+-------------------------------------------------------------------------------------------------
+
+### sido: Local information of hospital
+
+```{r}
+train_dta %>% 
+  select(OC, sido) %>% 
+  ggplot(aes(x = sido, fill = OC)) + 
+  geom_bar() +
+  coord_flip()
+```
+
+```{r}
+test_dta %>% 
+  select(OC, sido) %>% 
+  ggplot(aes(x = sido)) + 
+  geom_bar() +
+  coord_flip()
+```
+
+We can notice from the above plots that while most cities/provinces appear in both the training and test sets, there are a few that appear only one of them (i.e. `jeju`, `gwangju`, `gangwon`)
+
+-------------------------------------------------------------------------------------------------
+
+### sgg: Local detail information of hospital
+
+```{r}
+train_dta %>% 
+  select(OC, sgg) %>% 
+  ggplot(aes(x = sgg, y = OC, fill = OC)) + 
+  geom_point()
+```
+
+On first glance, the `sgg` variable does not seem to be useful in our goal of trying to predict whether a hospital would close or not (well... not on its own, anyway).
+
+Before we move on though, let's check something first. 
+
+```{r}
+length(unique(unlist(train_dta$sgg)))
+```
+
+We are guessing that `sgg` is some kind of ID used to indicate the district where each hospital is located and this dataset consists of 155 distinct ones. Before we continue, let's see if the test set contains any districts that do not exist in the training set.
+
+```{r}
+length(unique(union(unlist(train_dta$sgg),unlist(test_dta$sgg))))
+```
+
+```{r}
+length(unique(unlist(test_dta$sgg)))
+```
+
+It seems that there are districts that exist in the test set and not in the training set. This may lead to the `sgg` variable being eliminated before training the prediction model later as it cannot be used to discriminate opening hospoital from closing ones (at least not in a straightforward manner).
+
+```{r}
+train_dta %>% 
+  group_by(sido,sgg) %>% 
+  summarise(count = n()) %>% 
+  arrange(sgg)
+```
+
+The above command was to make sure that each `sgg` belongs to only one `sido` (i.e. that no `sgg` appears with more than one `sido` in the data). This makes sense as each district should only belong to one provinc/city (a district belonging to two provinces would not make sense).
+
+```{r}
+test_dta %>% 
+  group_by(sido,sgg) %>% 
+  summarise(count = n()) %>% 
+  arrange(sgg)
+```
+
+The above command was to make sure that, for each `sgg` that existed in both the training and test data, it co-occured with the same `sido` in the training and test sets.
+
+-------------------------------------------------------------------------------------------------
+
+### openDate: Hospital establishment date
+
+```{r}
+# view some values of the 'openDate' variable
+train_dta %>% 
+  select(openDate) %>% 
+  head()
+```
+
+Some parsing is in order. We shall separate it into three variables: year, month and day.
+
+```{r}
+# create new variables to hold the year/month/day values of 'openDate'
+train_dta %>% 
+  mutate(openDateYYYY = substr(openDate,1,4), 
+         openDateMM = substr(openDate,5,6), 
+         openDateDD = substr(openDate,7,8)) %>% 
+  select(OC, openDateYYYY, openDateMM, openDateDD) %>% 
+  head()
+```
+
+```{r}
+# create new variables to hold the year/month/day values of 'openDate'
+train_dta %>% 
+  mutate(openDateYYYY = substr(openDate,1,4), 
+         openDateMM = substr(openDate,5,6), 
+         openDateDD = substr(openDate,7,8)) %>% 
+  select(OC, openDateYYYY, openDateMM, openDateDD) %>% 
+  ggplot(aes(x = openDateYYYY, fill = OC)) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90, vjust=0.5))
+```
+
+It seems that older hospitals are less likely to close than newer ones.
+
+For fun, let's just see what the above plot looks like for `openDateMM`.
+
+```{r}
+# create new variables to hold the year/month/day values of 'openDate'
+train_dta %>% 
+  mutate(openDateYYYY = substr(openDate,1,4), 
+         openDateMM = substr(openDate,5,6), 
+         openDateDD = substr(openDate,7,8)) %>% 
+  select(OC, openDateYYYY, openDateMM, openDateDD) %>% 
+  ggplot(aes(x = openDateMM, fill = OC)) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90, vjust=0.5))
+```
+
+-------------------------------------------------------------------------------------------------
+
+### bedCount: Number of sickbeds
+
+```{r}
+summary(train_dta$bedCount)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, bedCount) %>% 
+  filter(!is.na(bedCount)) %>% 
+  ggplot(aes(x = bedCount, fill = OC)) + 
+  geom_histogram(binwidth = 50)
+```
+
+Finally, something worth noting. It seems that hospitals that have a greater-than-average number of sickbeds tend to stay open (with a few rare exceptions). Let's have a look at the hospitals that have `NA` values in the `bedCount` variable.
+
+```{r}
+train_dta %>% 
+  select(OC, bedCount) %>% 
+  filter(is.na(bedCount))
+```
+
+For whatever it is worth, the hospitals having `NA` values in the `bedCount` variable are usually ones that eventually `close`. This finding is to be taken with a grain of salt since it is based on only 5 records.
+
+There are some records that a value of `0` in the `bedCount` variable. Let's look at these too.
+
+```{r}
+train_dta %>% 
+  select(OC, bedCount) %>% 
+  filter(bedCount == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+Similar to the distribution observed from the entire training data, the majority of the hospitals having a value of `0` in the `bedCount` variable are `open`. Nothing interesting to report here.
+
+-------------------------------------------------------------------------------------------------
+
+### instkind: Sort of hospital
+
+```{r}
+train_dta %>% 
+  select(OC, instkind) %>% 
+  filter(!is.na(instkind)) %>% 
+  ggplot(aes(x = instkind, fill = OC)) + 
+  geom_bar() +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5)) + 
+  coord_flip()
+```
+
+Each of the seven types of hospitals had its failed ventures. No one type of hospitals was 100% successful (except for `dental_clinic`).
+
+-------------------------------------------------------------------------------------------------
+
+### employee1: Number of employees employed (fiscal year 2017)
+
+```{r}
+train_dta$employee1 <- as.numeric(train_dta$employee1)
+summary(train_dta$employee1)
+```
+
+```{r}
+head(sort(train_dta$employee1), 20)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, employee1) %>% 
+  filter(!is.na(employee1)) %>% 
+  ggplot(aes(x = employee1, fill = OC)) + 
+  geom_histogram(binwidth = 50)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, employee1) %>% 
+  filter(is.na(employee1))
+```
+
+-------------------------------------------------------------------------------------------------
+
+### employee2: Number of employees employed (fiscal year 2016)
+
+```{r}
+train_dta$employee2 <- as.numeric(train_dta$employee2)
+summary(train_dta$employee2)
+```
+
+```{r}
+head(sort(train_dta$employee2), 20)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, employee2) %>% 
+  filter(!is.na(employee2)) %>% 
+  ggplot(aes(x = employee2, fill = OC)) + 
+  geom_histogram(binwidth = 50)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, employee2) %>% 
+  filter(is.na(employee2))
+```
+
+```{r}
+train_dta %>% 
+  select(employee1, employee2) %>% 
+  filter(!is.na(employee1) & !is.na(employee2)) %>% 
+  as.matrix() %>% 
+  cor()
+```
+
+-------------------------------------------------------------------------------------------------
+
+### ownerChange: change of company representative
+
+```{r}
+train_dta %>% 
+  select(OC, ownerChange) %>% 
+  filter(!is.na(ownerChange)) %>% 
+  ggplot(aes(x = ownerChange, fill = OC)) + 
+  geom_bar() +
+  coord_flip()
+```
+
+It does not seem that value of `ownerChange` matters much, although proportions-wise, it seems that the hospitals that had an owner change had a bigger portion of failed hospitals than those that did not have an owner change. That is to say, when a hospital gets an owner change, the hospital becomes more likely to close. For example, the hospital may have been sold to another owner due to financial difficulties that the hospital was facing.
+
+```{r}
+train_dta %>% 
+  select(OC, ownerChange) %>% 
+  group_by(ownerChange) %>% 
+  summarise(open = sum(OC == "open"), close = sum(OC == "close")) %>% 
+  mutate(close_to_open_ratio = close/open)
+```
+
+-------------------------------------------------------------------------------------------------
+
+### Variables of Fiscal Years, 2016 & 2017
+
+Before moving on with the rest of the variables let's view the variables having the suffix `1` in a correlogram to sniff out any relations between them.
+
+```{r}
+# indices of rows (instances) containing NA values in them
+row_indices <- 
+  train_dta %>% 
+  map_df(is.na) %>%                              # turn into an is.na() matrix
+  transmute(rowHasNAvalue = rowSums(.) > 0) %>%  # create variable indicating whether the row has an NA value
+  as.matrix() %>%                                # convert into matrix (for the following 'which' function)
+  which()                                        # return indices of rows having NA values
+
+# display a correlogram of all the variables together
+train_dta[-row_indices,8:31] %>% 
+  cor() %>%                        # compute pairwise correlations 
+  round(1) %>%                     # round to one decimal point
+  ggcorrplot(hc.order = FALSE, 
+             type = "lower", 
+             #lab = TRUE, 
+             #lab_size = 3, 
+             method="square", 
+             colors = c("tomato2", "white", "springgreen3"), 
+             title="Correlogram of all features", 
+             ggtheme=theme_bw)
+```
+
+The above figure shows an important observation. That is, most variables highly with each other. Some exceptions include `profit1`, `interest1`, `shortLoan1`, `longLoan1`, `OnonCAsset1` and `surplus1`. Based on the high correlations observed in the figure above, the plots that will be generated for the variables in the figure should look similar to one another.
+
+-------------------------------------------------------------------------------------------------
+
+### revenue1: revenue (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, revenue1) %>% 
+  filter(!is.na(revenue1)) %>% 
+  ggplot(aes(x = revenue1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+Another finding worth mentioning; hospitals that `close` all seem to be at the lower end of the revenu scale. It may be useful to separate the data into two box plots (one for `open` hospitals and one for hospitals that `close`).
+
+```{r}
+train_dta %>% 
+  select(OC, revenue1) %>% 
+  filter(!is.na(revenue1)) %>% 
+  ggplot(aes(x = OC, y = revenue1, fill = OC)) + 
+  geom_boxplot()
+```
+
+Some of the hopsitals have the value `0` in the `revenue1` variable. Let's check those out.
+
+```{r}
+train_dta %>% 
+  select(OC, revenue1) %>% 
+  filter(revenue1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+```{r}
+train_dta %>% 
+  select(OC, revenue1) %>% 
+  filter(revenue1 > 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### salescost1: sales cost (fiscal year 2017)
+
+```{r}
+summary(train_dta$salescost1)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, salescost1) %>% 
+  filter(!is.na(salescost1)) %>% 
+  filter(salescost1 > 0) %>% 
+  ggplot(aes(x = salescost1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, salescost1) %>% 
+  filter(!is.na(salescost1)) %>% 
+  filter(salescost1 != 0) %>% 
+  #ggplot(aes(x = OC, y = log(salescost1), fill = OC)) + 
+  ggplot(aes(x = OC, y = salescost1, fill = OC)) + 
+  geom_boxplot()
+```
+
+-------------------------------------------------------------------------------------------------
+
+### sga1: selling and general administrative expense (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, sga1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, sga1) %>% 
+  filter(!is.na(sga1)) %>% 
+  ggplot(aes(x = sga1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, sga1) %>% 
+  filter(!is.na(sga1)) %>% 
+  filter(sga1 != 0) %>% 
+  ggplot(aes(x = OC, y = sga1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, sga1) %>% 
+  filter(sga1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### salary1: salary account (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, salary1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, salary1) %>% 
+  filter(!is.na(salary1)) %>% 
+  ggplot(aes(x = salary1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, salary1) %>% 
+  filter(!is.na(salary1)) %>% 
+  filter(salary1 != 0) %>% 
+  ggplot(aes(x = OC, y = salary1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, salary1) %>% 
+  filter(salary1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### noi1: non-operating income (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, noi1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, noi1) %>% 
+  filter(!is.na(noi1)) %>% 
+  ggplot(aes(x = noi1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, noi1) %>% 
+  filter(!is.na(noi1)) %>% 
+  filter(noi1 != 0) %>% 
+  ggplot(aes(x = OC, y = noi1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, noi1) %>% 
+  filter(noi1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### noe1: non-operating expenses (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, noe1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, noe1) %>% 
+  filter(!is.na(noe1)) %>% 
+  ggplot(aes(x = noe1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, noe1) %>% 
+  filter(!is.na(noe1)) %>% 
+  filter(noe1 != 0) %>% 
+  ggplot(aes(x = OC, y = noe1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, noe1) %>% 
+  filter(noe1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### interest1: interest cost (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, interest1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, interest1) %>% 
+  filter(!is.na(interest1)) %>% 
+  ggplot(aes(x = interest1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, interest1) %>% 
+  filter(!is.na(interest1)) %>% 
+  filter(interest1 != 0) %>% 
+  ggplot(aes(x = OC, y = interest1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, interest1) %>% 
+  filter(interest1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+```{r}
+train_dta %>% 
+  select(OC, interest1) %>% 
+  filter(interest1 != 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### ctax1: corporate tax (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, ctax1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, ctax1) %>% 
+  filter(!is.na(ctax1)) %>% 
+  ggplot(aes(x = ctax1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, ctax1) %>% 
+  filter(!is.na(ctax1)) %>% 
+  filter(ctax1 != 0) %>% 
+  ggplot(aes(x = OC, y = ctax1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, ctax1) %>% 
+  filter(ctax1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### profit1: net profit during the term (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, profit1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, profit1) %>% 
+  filter(!is.na(profit1)) %>% 
+  ggplot(aes(x = profit1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, profit1) %>% 
+  filter(!is.na(profit1)) %>% 
+  filter(profit1 != 0) %>% 
+  ggplot(aes(x = OC, y = profit1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, profit1) %>% 
+  filter(profit1 > 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+```{r}
+train_dta %>% 
+  select(OC, profit1) %>% 
+  filter(profit1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+```{r}
+train_dta %>% 
+  select(OC, profit1) %>% 
+  filter(profit1 < 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### liquidAsset1: liquid asset (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OC, liquidAsset1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, liquidAsset1) %>% 
+  filter(!is.na(liquidAsset1)) %>% 
+  ggplot(aes(x = liquidAsset1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, liquidAsset1) %>% 
+  filter(!is.na(liquidAsset1)) %>% 
+  filter(liquidAsset1 != 0) %>% 
+  ggplot(aes(x = OC, y = liquidAsset1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, liquidAsset1) %>% 
+  filter(liquidAsset1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### quickAsset1: quick asset (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(quickAsset1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, quickAsset1) %>% 
+  filter(!is.na(quickAsset1)) %>% 
+  ggplot(aes(x = quickAsset1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, quickAsset1) %>% 
+  filter(!is.na(quickAsset1)) %>% 
+  filter(quickAsset1 != 0) %>% 
+  ggplot(aes(x = OC, y = quickAsset1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, quickAsset1) %>% 
+  filter(quickAsset1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### receivableS1: accounts receivable(short-term) (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(receivableS1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, receivableS1) %>% 
+  filter(!is.na(receivableS1)) %>% 
+  ggplot(aes(x = receivableS1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, receivableS1) %>% 
+  filter(!is.na(receivableS1)) %>% 
+  filter(receivableS1 != 0) %>% 
+  ggplot(aes(x = OC, y = receivableS1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, receivableS1) %>% 
+  filter(receivableS1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### inventoryAsset1: inventory asset (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(inventoryAsset1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, inventoryAsset1) %>% 
+  filter(!is.na(inventoryAsset1)) %>% 
+  ggplot(aes(x = inventoryAsset1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, inventoryAsset1) %>% 
+  filter(!is.na(inventoryAsset1)) %>% 
+  filter(inventoryAsset1 != 0) %>% 
+  ggplot(aes(x = OC, y = inventoryAsset1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, inventoryAsset1) %>% 
+  filter(inventoryAsset1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### nonCAsset1: noncurrent asset (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(nonCAsset1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, nonCAsset1) %>% 
+  filter(!is.na(nonCAsset1)) %>% 
+  ggplot(aes(x = nonCAsset1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, nonCAsset1) %>% 
+  filter(!is.na(nonCAsset1)) %>% 
+  filter(nonCAsset1 != 0) %>% 
+  ggplot(aes(x = OC, y = nonCAsset1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, nonCAsset1) %>% 
+  filter(nonCAsset1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### tanAsset1: tangible assets (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(tanAsset1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, tanAsset1) %>% 
+  filter(!is.na(tanAsset1)) %>% 
+  ggplot(aes(x = tanAsset1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, tanAsset1) %>% 
+  filter(!is.na(tanAsset1)) %>% 
+  filter(tanAsset1 != 0) %>% 
+  ggplot(aes(x = OC, y = tanAsset1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, tanAsset1) %>% 
+  filter(tanAsset1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### OnonCAsset1: other noncurrent asset (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(OnonCAsset1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, OnonCAsset1) %>% 
+  filter(!is.na(OnonCAsset1)) %>% 
+  ggplot(aes(x = OnonCAsset1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, OnonCAsset1) %>% 
+  filter(!is.na(OnonCAsset1)) %>% 
+  filter(OnonCAsset1 != 0) %>% 
+  ggplot(aes(x = OC, y = OnonCAsset1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, OnonCAsset1) %>% 
+  filter(OnonCAsset1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### receivableL1: accounts receivable(long-term) (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(receivableL1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, receivableL1) %>% 
+  filter(!is.na(receivableL1)) %>% 
+  ggplot(aes(x = receivableL1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, receivableL1) %>% 
+  filter(!is.na(receivableL1)) %>% 
+  filter(receivableL1 != 0) %>% 
+  ggplot(aes(x = OC, y = receivableL1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, receivableL1) %>% 
+  filter(receivableL1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+```{r}
+train_dta %>% 
+  select(OC, receivableL1) %>% 
+  filter(receivableL1 > 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+```{r}
+train_dta %>% 
+  select(OC, receivableL1) %>% 
+  filter(is.na(receivableL1)) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### debt1: total debt (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(debt1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, debt1) %>% 
+  filter(!is.na(debt1)) %>% 
+  ggplot(aes(x = debt1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, debt1) %>% 
+  filter(!is.na(debt1)) %>% 
+  filter(debt1 != 0) %>% 
+  ggplot(aes(x = OC, y = debt1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, debt1) %>% 
+  filter(debt1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### liquidLiabilities1: liquid liabilities (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(liquidLiabilities1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, liquidLiabilities1) %>% 
+  filter(!is.na(liquidLiabilities1)) %>% 
+  ggplot(aes(x = liquidLiabilities1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, liquidLiabilities1) %>% 
+  filter(!is.na(liquidLiabilities1)) %>% 
+  filter(liquidLiabilities1 != 0) %>% 
+  ggplot(aes(x = OC, y = liquidLiabilities1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, liquidLiabilities1) %>% 
+  filter(liquidLiabilities1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### shortLoan1: short-term debt (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(shortLoan1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, shortLoan1) %>% 
+  filter(!is.na(shortLoan1)) %>% 
+  ggplot(aes(x = shortLoan1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, shortLoan1) %>% 
+  filter(!is.na(shortLoan1)) %>% 
+  filter(shortLoan1 != 0) %>% 
+  ggplot(aes(x = OC, y = shortLoan1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, shortLoan1) %>% 
+  filter(shortLoan1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### NCLiabilities1: noncurrent liabilities (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(NCLiabilities1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, NCLiabilities1) %>% 
+  filter(!is.na(NCLiabilities1)) %>% 
+  ggplot(aes(x = NCLiabilities1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, NCLiabilities1) %>% 
+  filter(!is.na(NCLiabilities1)) %>% 
+  filter(NCLiabilities1 != 0) %>% 
+  ggplot(aes(x = OC, y = NCLiabilities1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, NCLiabilities1) %>% 
+  filter(NCLiabilities1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### longLoan1: long-term loan (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(longLoan1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, longLoan1) %>% 
+  filter(!is.na(longLoan1)) %>% 
+  ggplot(aes(x = longLoan1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, longLoan1) %>% 
+  filter(!is.na(longLoan1)) %>% 
+  filter(longLoan1 != 0) %>% 
+  ggplot(aes(x = OC, y = longLoan1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, longLoan1) %>% 
+  filter(longLoan1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### netAsset1: net assets (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(netAsset1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, netAsset1) %>% 
+  filter(!is.na(netAsset1)) %>% 
+  ggplot(aes(x = netAsset1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, netAsset1) %>% 
+  filter(!is.na(netAsset1)) %>% 
+  filter(netAsset1 != 0) %>% 
+  ggplot(aes(x = OC, y = netAsset1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, netAsset1) %>% 
+  filter(netAsset1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+### surplus1: earned surplus (fiscal year 2017)
+
+```{r}
+train_dta %>% 
+  select(surplus1) %>% 
+  summary()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, surplus1) %>% 
+  filter(!is.na(surplus1)) %>% 
+  ggplot(aes(x = surplus1, fill = OC)) + 
+  geom_histogram(bins = 10)
+```
+
+```{r}
+train_dta %>% 
+  select(OC, surplus1) %>% 
+  filter(!is.na(surplus1)) %>% 
+  filter(surplus1 != 0) %>% 
+  ggplot(aes(x = OC, y = surplus1, fill = OC)) + 
+  geom_boxplot()
+```
+
+```{r}
+train_dta %>% 
+  select(OC, surplus1) %>% 
+  filter(surplus1 == 0) %>% 
+  group_by(OC) %>% 
+  summarise(count = n())
+```
+
+-------------------------------------------------------------------------------------------------
+
+At the end of this section, our findings are as follows:
+
+* There were many correlated pairs of features. Figures consisting of a histogram and boxplot for each feature were then. Most of these figures turned out similar, which was expected due to the highly correlated features (with exceptions like `profit1` and `surplus1`).
+* `receivableL1` does not seem like a useful feature. It had all zeros and some `NA`s.
+* From a quick inspection of the data displayed using the `View()` function, it appears that hospitals that came out in 2017 have zeros for values in the variables ending with `2` (which makes sense since these variables pertain to the 2016 fiscal year).
+* For variables numbered 8 to 55, when one of them has an `NA` value, then the rest of these variables will `NA`s as well. That is, these variables `NA`s always co-occur together (when one of these variable has `NA`, then the rest will have them as well).
+* For the `employee1` and `employee2` variables occasionally have their `NA`s. Some records have an `NA` value in either of the two variables and, in other records, there is an `NA` in both.
+
+
+-------------------------------------------------------------------------------------------------
+
+
+## Dealing with Missing Values
+
+We'll have a closer look at the `NA` values that occur in the different variables.
+
+### Variables 8 to 55
+
+```{r}
+# get hospitals for which variables 8 to 55 are 'NA'
+train_dta %>% 
+  filter(is.na(revenue1)) %>% 
+  select(-c(1, 8:55))
+```
+
+
+* `employee1`/`employee2`: If either of them is `NA`, fill with the value of the other. If both are `NA`, leave empty or fill with mean. A possibly better alternative is to replace them with a new variable showing whether there was an increase in the number of employees.
+* `bedCount`: If `NA`, fill with mean or predict value using `instkind` as a predictor value (i.e. mean for the particular `instkind` of the hospital).
+* `instkind`: If `NA`, replace with the mode (i.e. `general hospital`).
+* `ownerChange`: If `NA`, give value of `same`. Alternatively, train a prediction model for `ownerChange` using some or all of the other variables as predictors.
+* Variables 8-55: If all these variables are `NA`, leave as `NA`. If not all are `NA`, then replace with 0's.
+
+```{r}
+# FILL MISSING VALUES!
+train_dta %>% 
+```
+
+
+-------------------------------------------------------------------------------------------------
+
+
+## Feature Extraction
+
+In this section, we will first generate new features from the variables ending with a suffix of `1` or `2` mostly in the form of differences and ratios. Another features that we have in mind is the number of days that have passed since the opening of the hospital. Let's go!
+
+```{r}
+train_dta$revenue3           <- train_dta$revenue1           - train_dta$revenue2
+train_dta$salescost3         <- train_dta$salescost1         - train_dta$salescost2
+train_dta$sga3               <- train_dta$sga1               - train_dta$sga2
+train_dta$salary3            <- train_dta$salary1            - train_dta$salary2
+train_dta$noi3               <- train_dta$noi1               - train_dta$noi2
+train_dta$noe3               <- train_dta$noe1               - train_dta$noe2
+train_dta$interest3          <- train_dta$interest1          - train_dta$interest2
+train_dta$ctax3              <- train_dta$ctax1              - train_dta$ctax2
+train_dta$profit3            <- train_dta$profit1            - train_dta$profit2
+train_dta$liquidAsset3       <- train_dta$liquidAsset1       - train_dta$profit2
+train_dta$quickAsset3        <- train_dta$quickAsset1        - train_dta$quickAsset2
+train_dta$receivableS3       <- train_dta$receivableS1       - train_dta$receivableS2
+train_dta$inventoryAsset3    <- train_dta$inventoryAsset1    - train_dta$inventoryAsset2
+train_dta$nonCAsset3         <- train_dta$nonCAsset1         - train_dta$nonCAsset2
+train_dta$tanAsset3          <- train_dta$tanAsset1          - train_dta$tanAsset2
+train_dta$OnonCAsset3        <- train_dta$OnonCAsset1        - train_dta$OnonCAsset2
+#train_dta$receivableL3       <- train_dta$receivableL1       - train_dta$receivableL2
+train_dta$debt3              <- train_dta$debt1              - train_dta$debt1
+train_dta$liquidLiabilities3 <- train_dta$liquidLiabilities1 - train_dta$liquidLiabilities2
+train_dta$shortLoan3         <- train_dta$shortLoan1         - train_dta$shortLoan2
+train_dta$NCLiabilities3     <- train_dta$NCLiabilities1     - train_dta$NCLiabilities2
+train_dta$longLoan3          <- train_dta$longLoan1          - train_dta$longLoan2
+train_dta$netAsset3          <- train_dta$netAsset1          - train_dta$netAsset2
+train_dta$surplus3           <- train_dta$surplus1           - train_dta$surplus2
+```
+
+
+```{r}
+#generate a proper datetime variables (using strptime() function?)
+
+
+#generate 'age_of_hospital' variable by subtracting 'openDate' from the current date
+
+```
+
+
+-------------------------------------------------------------------------------------------------
+
+
+## Exploratory Data Analysis on the Extracted Features
+
+PCA on the numerical variables (8-55) and see how the visualization looks?
+
+<Continue the EDA on all the features + inspiration from Viz Master List + do some feature extraction/engineering (e.g. differences/ratios between features ???1 and ???2, subtract 2018 - opening year, etc.) + EDA on those new features, prepare for machine learning!!!!!>
+
+
+-------------------------------------------------------------------------------------------------
+
+
+## Feature Engineering
+
+<normalization to range 0,1, except for profit1 do standard normalization  -->  prepare for training prediction models>
+
+
+-------------------------------------------------------------------------------------------------
+
+
+Below is garbage leftovers...
+
+```{r}
+# variables containing NA values
+NA_vars <- 
+  train_dta %>% 
+  map_df(is.na) %>% 
+  select_if(colSums(.) > 0) %>% 
+  colnames()
+```
+
+
+
+
+
+
+
+
+
+
