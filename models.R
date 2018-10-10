@@ -5,7 +5,7 @@ library(ggbiplot)
 #########################
 # Base Model (no pca)
 ########################
-train <- read.csv("1.train_dta_log_num.csv")
+train <- read.csv("2.train_dta_min_max.csv")
 
 # Feature Selection
 base.mod <- lm( as.numeric(OC) ~ 1 , data = train)  # base intercept only model
@@ -61,7 +61,7 @@ print(shortlistedVars)
 summary(stepMod)
 
 y.dep <- 29
-x.indep <- c(7, 13, 24, 26, 28)
+x.indep <- c(25, 11, 23, 18, 22, 20, 14, 15, 9, 24, 6, 28)
 ntrees_opt <- c(600, 800, 1000, 1200)
 maxdepth_opt <- c(8, 10, 12, 14, 16)
 hyper_parameters <- list(ntrees=ntrees_opt,
@@ -72,7 +72,7 @@ regression.model <- h2o.glm( y = y.dep, x = x.indep, training_frame = as.h2o(tra
 h2o.performance(regression.model)
 
 # test date
-test <- read.csv("1.test_dta_log_num.csv")
+test <- read.csv("2.test_dta_min_max.csv")
 glimpse(test)
 debt3_idx <- grep("debt3", colnames(test))
 test.pca <- prcomp(test[, -c(1:2, 4, 6, debt3_idx)], center = TRUE, scale. = TRUE)
@@ -87,8 +87,8 @@ test.new$ownerChange <- as.numeric(test$ownerChange)
 test.new$OC <- test$OC
 h2o.init()
 predict.reg <- as.data.frame(h2o.predict(regression.model, as.h2o(test.new[, x.indep])))
-OC_reg <- data.frame(inst_id = test$inst_id, OC = as.numeric(predict.reg$predict))
-write.csv(OC_reg, file = "OC_reg_2.csv", quote = FALSE, row.names=FALSE)
+OC_reg <- data.frame(inst_id = test$inst_id, OC = as.numeric(predict.reg$predict)-1)
+write.csv(OC_reg, file = "OC_reg_3.csv", quote = FALSE, row.names=FALSE)
 
 ##########################
 ## Random Forest
@@ -128,7 +128,7 @@ h2o.varimp(fit.best)
 
 system.time(predict.rforest <- as.data.frame(h2o.predict(fit.best, test.h2o)))
 OC_rf <- data.frame(inst_id = test$inst_id, OC = predict.rforest$predict)
-write.csv(OC_rf, file = "OC_rf_2.csv", quote = FALSE, row.names=FALSE)
+write.csv(OC_rf, file = "OC_rf_3.csv", quote = FALSE, row.names=FALSE)
 
  system.time(
 rforest.model <- h2o.randomForest(y=y.dep, x=x.indep, training_frame = train.h2o,
@@ -138,7 +138,7 @@ h2o.performance(rforest.model)
 h2o.varimp(rforest.model)
 predict.rforest <- as.data.frame(h2o.predict(rforest.model, test.h2o))
 OC_rf <- data.frame(inst_id = test$inst_id, OC = as.numeric(predict.rforest$predict))
-write.csv(OC_rf, file = "OC_rf_1.csv", quote = FALSE, row.names=FALSE)
+write.csv(OC_rf, file = "OC_rf_3.csv", quote = FALSE, row.names=FALSE)
 
 ###############################################
 ## GBM
@@ -181,4 +181,4 @@ h2o.performance (gbm.model)
 predict.gbm <- as.data.frame(h2o.predict(gbm.model, test.h2o))
 
 OC_gbm <- data.frame(inst_id = test$inst_id, OC = as.numeric(predict.gbm$predict) - 1)
-write.csv(OC_gbm, file = "OC_gbm_2.csv", quote = FALSE, row.names=FALSE)
+write.csv(OC_gbm, file = "OC_gbm_3.csv", quote = FALSE, row.names=FALSE)
