@@ -35,13 +35,13 @@ debt3_idx <- grep("debt3", colnames(train))
 train.pca <- prcomp(train[, -c(1:2, 4, 6, debt3_idx)], center = TRUE, scale. = TRUE)
 summary(train.pca)
 ggbiplot(train.pca)
-train.new <- train.pca$x[,1:16] # explains 90% of data
+train.new <- train.pca$x[, 1:26] # explains 100% of data
 train.new <- as.tibble(train.new)
 
 # add factor data
 train.new$instkind <- as.numeric(train$instkind)
 train.new$ownerChange <- as.numeric(train$ownerChange)
-train.new$OC <- as.numeric(train$OC)
+train.new$OC <- train$OC
 # try to perform FS again
 base.mod <- lm( as.numeric(OC) ~ 1 , data = train.new)  # base intercept only model
 all.mod <- lm( as.numeric(OC) ~ . , data = train.new) # full model with all predictors
@@ -60,10 +60,10 @@ shortlistedVars <-
 print(shortlistedVars)
 summary(stepMod)
 
-y.dep <- 19
-x.indep <- c(1: 18)
-ntrees_opt <- c(800, 1000, 1200)
-maxdepth_opt <- c(10, 12, 14, 16)
+y.dep <- 29
+x.indep <- c(7, 13, 24, 26, 28)
+ntrees_opt <- c(600, 800, 1000, 1200)
+maxdepth_opt <- c(8, 10, 12, 14, 16)
 hyper_parameters <- list(ntrees=ntrees_opt,
                          max_depth=maxdepth_opt)
 
@@ -78,17 +78,17 @@ debt3_idx <- grep("debt3", colnames(test))
 test.pca <- prcomp(test[, -c(1:2, 4, 6, debt3_idx)], center = TRUE, scale. = TRUE)
 summary(test.pca)
 ggbiplot(test.pca)
-test.new <- test.pca$x[,1:16] # explains 90% of data
+test.new <- test.pca$x[,1:26] # explains 90% of data
 test.new <- as.tibble(test.new)
 
 # add factor data
 test.new$instkind <- as.numeric(test$instkind)
 test.new$ownerChange <- as.numeric(test$ownerChange)
 test.new$OC <- test$OC
-
+h2o.init()
 predict.reg <- as.data.frame(h2o.predict(regression.model, as.h2o(test.new[, x.indep])))
 OC_reg <- data.frame(inst_id = test$inst_id, OC = as.numeric(predict.reg$predict))
-write.csv(OC_reg, file = "OC_reg_1.csv", quote = FALSE, row.names=FALSE)
+write.csv(OC_reg, file = "OC_reg_2.csv", quote = FALSE, row.names=FALSE)
 
 ##########################
 ## Random Forest
@@ -128,7 +128,7 @@ h2o.varimp(fit.best)
 
 system.time(predict.rforest <- as.data.frame(h2o.predict(fit.best, test.h2o)))
 OC_rf <- data.frame(inst_id = test$inst_id, OC = predict.rforest$predict)
-write.csv(OC_rf, file = "OC_rf_1.csv", quote = FALSE, row.names=FALSE)
+write.csv(OC_rf, file = "OC_rf_2.csv", quote = FALSE, row.names=FALSE)
 
  system.time(
 rforest.model <- h2o.randomForest(y=y.dep, x=x.indep, training_frame = train.h2o,
