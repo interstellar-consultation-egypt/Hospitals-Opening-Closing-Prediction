@@ -354,6 +354,252 @@ write_csv(test_dta_z_transform_per_hosp_type,  '5.test_dta_z_transform_per_hosp_
 # --------------------------------------
 # --------------------------------------
 
+# one-hot encoding for categorical variables, instkind & ownerChange
+
+# function that creates one-hot encoding data frame from a single categorical variable
+one_hot_encoder <- function(x, prefix) {
+  values <- sort(unique(x))
+  
+  mymatrix <- matrix(length(x) * length(values), length(x), length(values))
+
+  mymatrix_colnames <- c()
+  for (v in values) {
+    mymatrix_colnames <- append(mymatrix_colnames,paste (prefix, v, sep = '_'))
+  }
+  
+  colnames(mymatrix) <- mymatrix_colnames
+  for (i in 1:length(values)) {
+    current_column <- vector(mode = 'numeric', length = length(x))
+    current_column <- (x == values[i]) * 1
+    mymatrix[,i] <- current_column
+  }
+  
+  mymatrix
+}
+
+
+# one-hot encoding for ownerChange
+ownerChange1hotenc <- one_hot_encoder(train_dta$ownerChange, 'ownerChange')
+train_dta <- 
+  train_dta %>% 
+  select(-ownerChange) %>% 
+  cbind(ownerChange1hotenc)
+ownerChange1hotenc <- one_hot_encoder(test_dta$ownerChange, 'ownerChange')
+test_dta <- 
+  test_dta %>% 
+  select(-ownerChange) %>% 
+  cbind(ownerChange1hotenc)
+
+
+# one-hot encoding for instkind
+instkind1hotenc <- one_hot_encoder(train_dta$instkind, 'instkind')
+# add 'clinic=1' for the hospital with type 'dental_clinic'
+instkind1hotenc[,'instkind_clinic'] <- instkind1hotenc[,'instkind_clinic'] + instkind1hotenc[,'instkind_dental_clinic']
+train_dta <- 
+  train_dta %>% 
+  cbind(instkind1hotenc) %>% 
+  select(-instkind_dental_clinic)  # remove dental_clinic column
+instkind1hotenc <- one_hot_encoder(test_dta$instkind, 'instkind')
+test_dta <- 
+  test_dta %>%  
+  cbind(instkind1hotenc)
+# backup of train_dta/test_dta before removing instkind (will use later)
+train_dta_bkp <- train_dta
+test_dta_bkp <- test_dta
+# remove instkind
+train_dta <- 
+  train_dta %>% 
+  select(-instkind)
+test_dta <- 
+  test_dta %>% 
+  select(-instkind)
+
+# --------------------------------------
+# --------------------------------------
+
+# ENCORE!!!  -->  difference this time is: one-hot encoding of instkind and ownerChange
+# prepare data for modeling (transformation)
+
+# log transformation for numerical variables (bedCount, employee1 & variables suffixed 3)
+# Before applying log transformation, we need to ensure that minimum value for each variable is 1
+train_dta_log_num_a <- train_dta
+test_dta_log_num_a <- test_dta
+
+train_dta_log_num_a[,c(3:29)] <- 
+  train_dta_log_num_a[,c(3:29)] %>% 
+  mutate_all(mylog)
+test_dta_log_num_a[,c(3:29)] <- 
+  test_dta_log_num_a[,c(3:29)] %>% 
+  mutate_all(mylog)
+
+write_csv(train_dta_log_num_a, '6a.train_dta_log_num.csv')
+write_csv(test_dta_log_num_a,  '6a.test_dta_log_num.csv')
+
+# ---------
+
+# transformation for numerical variables to range [0, 1] (min-max normalization)
+train_dta_min_max_a <- train_dta
+test_dta_min_max_a <- test_dta
+
+train_dta_min_max_a[,c(3:29)] <- 
+  train_dta_min_max_a[,c(3:29)] %>% 
+  mutate_all(myminmax)
+test_dta_min_max_a[,c(3:29)] <- 
+  test_dta_min_max_a[,c(3:29)] %>% 
+  mutate_all(myminmax)
+
+write_csv(train_dta_min_max_a, '7a.train_dta_min_max.csv')
+write_csv(test_dta_min_max_a,  '7a.test_dta_min_max.csv')
+
+# ---------
+
+# transformation for numerical variables: log transformation followed by min-max normalization
+train_dta_log_num_min_max_a <- train_dta
+test_dta_log_num_min_max_a <- test_dta
+
+train_dta_log_num_min_max_a[,c(3:29)] <- 
+  train_dta_log_num_min_max_a[,c(3:29)] %>% 
+  mutate_all(mylognumminmax)
+test_dta_log_num_min_max_a[,c(3:29)] <- 
+  test_dta_log_num_min_max_a[,c(3:29)] %>% 
+  mutate_all(mylognumminmax)
+
+write_csv(train_dta_log_num_min_max_a, '8a.train_dta_log_num_min_max.csv')
+write_csv(test_dta_log_num_min_max_a,  '8a.test_dta_log_num_min_max.csv')
+
+# ---------
+
+# transformation for numerical variables: Z-transform
+train_dta_z_transform_a <- train_dta
+test_dta_z_transform_a <- test_dta
+
+train_dta_z_transform_a[,c(3:29)] <- 
+  train_dta_z_transform_a[,c(3:29)] %>% 
+  mutate_all(myztransform)
+test_dta_z_transform_a[,c(3:29)] <- 
+  test_dta_z_transform_a[,c(3:29)] %>% 
+  mutate_all(myztransform)
+
+write_csv(train_dta_z_transform_a, '9a.train_dta_z_transform.csv')
+write_csv(test_dta_z_transform_a,  '9a.test_dta_z_transform.csv')
+
+# ---------
+
+# transformation for numerical variables: Z-transform per hospital type
+train_dta_z_transform_per_hosp_type_a <- train_dta_bkp
+test_dta_z_transform_per_hosp_type_a <- test_dta_bkp
+
+train_dta_z_transform_per_hosp_type_a[,c(3:30)] <-       # include instkind to use as grouping variable
+  train_dta_z_transform_per_hosp_type_a[,c(3:30)] %>% 
+  group_by(instkind) %>% 
+  mutate_all(myztransform)
+test_dta_z_transform_per_hosp_type_a[,c(3:30)] <- 
+  test_dta_z_transform_per_hosp_type_a[,c(3:30)] %>% 
+  group_by(instkind) %>% 
+  mutate_all(myztransform)
+
+# remove instkind
+train_dta_z_transform_per_hosp_type_a <- 
+  train_dta_z_transform_per_hosp_type_a %>% 
+  select(-instkind)
+test_dta_z_transform_per_hosp_type_a <- 
+  test_dta_z_transform_per_hosp_type_a %>% 
+  select(-instkind)
+
+write_csv(train_dta_z_transform_per_hosp_type_a, '10a.train_dta_z_transform_per_hosp_type.csv')
+write_csv(test_dta_z_transform_per_hosp_type_a,  '10a.test_dta_z_transform_per_hosp_type.csv')
+
+# --------------------------------------
+# --------------------------------------
+
+# Post-processing (Squaring!)
+mysquare <- function(x) {
+  x <- sign(x) * x^2
+  x
+}
+
+train_dta_log_num_b <- train_dta_log_num_a
+test_dta_log_num_b <- test_dta_log_num_a
+train_dta_log_num_b[3:29] <- mysquare(train_dta_log_num_b[3:29])
+test_dta_log_num_b[3:29] <- mysquare(test_dta_log_num_b[3:29])
+write_csv(train_dta_log_num_b, '6b.train_dta_log_num.csv')
+write_csv(test_dta_log_num_b,  '6b.test_dta_log_num.csv')
+
+train_dta_min_max_b <- train_dta_min_max_a
+test_dta_min_max_b <- test_dta_min_max_a
+train_dta_min_max_b[3:29] <- mysquare(train_dta_min_max_b[3:29])
+test_dta_min_max_b[3:29] <- mysquare(test_dta_min_max_b[3:29])
+write_csv(train_dta_min_max_b, '7b.train_dta_min_max.csv')
+write_csv(test_dta_min_max_b,  '7b.test_dta_min_max.csv')
+
+train_dta_log_num_min_max_b <- train_dta_log_num_min_max_a
+test_dta_log_num_min_max_b <- test_dta_log_num_min_max_a
+train_dta_log_num_min_max_b[3:29] <- mysquare(train_dta_log_num_min_max_b[3:29])
+test_dta_log_num_min_max_b[3:29] <- mysquare(test_dta_log_num_min_max_b[3:29])
+write_csv(train_dta_log_num_min_max_b, '8b.train_dta_log_num_min_max.csv')
+write_csv(test_dta_log_num_min_max_b,  '8b.test_dta_log_num_min_max.csv')
+
+train_dta_z_transform_b <- train_dta_z_transform_a
+test_dta_z_transform_b <- test_dta_z_transform_a
+train_dta_z_transform_b[3:29] <- mysquare(train_dta_z_transform_b[3:29])
+test_dta_z_transform_b[3:29] <- mysquare(test_dta_z_transform_b[3:29])
+write_csv(train_dta_z_transform_b, '9b.train_dta_z_transform.csv')
+write_csv(test_dta_z_transform_b,  '9b.test_dta_z_transform.csv')
+
+train_dta_z_transform_per_hosp_type_b <- train_dta_z_transform_per_hosp_type_a
+test_dta_z_transform_per_hosp_type_b <- test_dta_z_transform_per_hosp_type_a
+train_dta_z_transform_per_hosp_type_b[3:29] <- mysquare(train_dta_z_transform_per_hosp_type_b[3:29])
+test_dta_z_transform_per_hosp_type_b[3:29] <- mysquare(test_dta_z_transform_per_hosp_type_b[3:29])
+write_csv(train_dta_z_transform_per_hosp_type_b, '10b.train_dta_z_transform_per_hosp_type.csv')
+write_csv(test_dta_z_transform_per_hosp_type_b,  '10b.test_dta_z_transform_per_hosp_type.csv')
+
+# --------------------------------------
+# --------------------------------------
+
+# Post-processing (Square-rooting!)
+mysqrt <- function(x) {
+  x <- sign(x) * sqrt(abs(x))
+  x
+}
+
+train_dta_log_num_c <- train_dta_log_num_a
+test_dta_log_num_c <- test_dta_log_num_a
+train_dta_log_num_c[3:29] <- mysqrt(train_dta_log_num_c[3:29])
+test_dta_log_num_c[3:29] <- mysqrt(test_dta_log_num_c[3:29])
+write_csv(train_dta_log_num_c, '6c.train_dta_log_num.csv')
+write_csv(test_dta_log_num_c,  '6c.test_dta_log_num.csv')
+
+train_dta_min_max_c <- train_dta_min_max_a
+test_dta_min_max_c <- test_dta_min_max_a
+train_dta_min_max_c[3:29] <- mysqrt(train_dta_min_max_c[3:29])
+test_dta_min_max_c[3:29] <- mysqrt(test_dta_min_max_c[3:29])
+write_csv(train_dta_min_max_c, '7c.train_dta_min_max.csv')
+write_csv(test_dta_min_max_c,  '7c.test_dta_min_max.csv')
+
+train_dta_log_num_min_max_c <- train_dta_log_num_min_max_a
+test_dta_log_num_min_max_c <- test_dta_log_num_min_max_a
+train_dta_log_num_min_max_c[3:29] <- mysqrt(train_dta_log_num_min_max_c[3:29])
+test_dta_log_num_min_max_c[3:29] <- mysqrt(test_dta_log_num_min_max_c[3:29])
+write_csv(train_dta_log_num_min_max_c, '8c.train_dta_log_num_min_max.csv')
+write_csv(test_dta_log_num_min_max_c,  '8c.test_dta_log_num_min_max.csv')
+
+train_dta_z_transform_c <- train_dta_z_transform_a
+test_dta_z_transform_c <- test_dta_z_transform_a
+train_dta_z_transform_c[3:29] <- mysqrt(train_dta_z_transform_c[3:29])
+test_dta_z_transform_c[3:29] <- mysqrt(test_dta_z_transform_c[3:29])
+write_csv(train_dta_z_transform_c, '9c.train_dta_z_transform.csv')
+write_csv(test_dta_z_transform_c,  '9c.test_dta_z_transform.csv')
+
+train_dta_z_transform_per_hosp_type_c <- train_dta_z_transform_per_hosp_type_a
+test_dta_z_transform_per_hosp_type_c <- test_dta_z_transform_per_hosp_type_a
+train_dta_z_transform_per_hosp_type_c[3:29] <- mysqrt(train_dta_z_transform_per_hosp_type_c[3:29])
+test_dta_z_transform_per_hosp_type_c[3:29] <- mysqrt(test_dta_z_transform_per_hosp_type_c[3:29])
+write_csv(train_dta_z_transform_per_hosp_type_c, '10c.train_dta_z_transform_per_hosp_type.csv')
+write_csv(test_dta_z_transform_per_hosp_type_c,  '10c.test_dta_z_transform_per_hosp_type.csv')
+
+# --------------------------------------
+# --------------------------------------
+
 # # normalize by variables suffixed 2 to get ratios
 # train_dta$revenue3           <- train_dta$revenue3           / train_dta$revenue2
 # train_dta$salescost3         <- train_dta$salescost3         / train_dta$salescost2
