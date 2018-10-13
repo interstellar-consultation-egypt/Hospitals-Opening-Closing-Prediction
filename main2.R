@@ -7,8 +7,8 @@ library(lubridate)
 # --------------------------------------
 
 # read the files
-train_dta <- read.csv("train.csv")
-test_dta  <- read.csv("test.csv")
+train_dta <- read.csv("data/train.csv")
+test_dta  <- read.csv("data/test.csv")
 
 # --------------------------------------
 # --------------------------------------
@@ -264,8 +264,8 @@ test_dta_log_num[,c(3,5,7:31)] <-
   test_dta_log_num[,c(3,5,7:31)] %>% 
   mutate_all(mylog)
 
-write_csv(train_dta_log_num, '1.train_dta_log_num.csv')
-write_csv(test_dta_log_num,  '1.test_dta_log_num.csv')
+write_csv(train_dta_log_num, 'data/Feature Engineered Files/1.train_dta_log_num.csv')
+write_csv(test_dta_log_num,  'data/Feature Engineered Files/1.test_dta_log_num.csv')
 
 # ---------
 
@@ -287,8 +287,8 @@ test_dta_min_max[,c(3,5,7:31)] <-
   test_dta_min_max[,c(3,5,7:31)] %>% 
   mutate_all(myminmax)
 
-write_csv(train_dta_min_max, '2.train_dta_min_max.csv')
-write_csv(test_dta_min_max,  '2.test_dta_min_max.csv')
+write_csv(train_dta_min_max, 'data/Feature Engineered Files/2.train_dta_min_max.csv')
+write_csv(test_dta_min_max,  'data/Feature Engineered Files/2.test_dta_min_max.csv')
 
 # ---------
 
@@ -309,8 +309,8 @@ test_dta_log_num_min_max[,c(3,5,7:31)] <-
   test_dta_log_num_min_max[,c(3,5,7:31)] %>% 
   mutate_all(mylognumminmax)
 
-write_csv(train_dta_log_num_min_max, '3.train_dta_log_num_min_max.csv')
-write_csv(test_dta_log_num_min_max,  '3.test_dta_log_num_min_max.csv')
+write_csv(train_dta_log_num_min_max, 'data/Feature Engineered Files/3.train_dta_log_num_min_max.csv')
+write_csv(test_dta_log_num_min_max,  'data/Feature Engineered Files/3.test_dta_log_num_min_max.csv')
 
 # ---------
 
@@ -330,8 +330,8 @@ test_dta_z_transform[,c(3,5,7:31)] <-
   test_dta_z_transform[,c(3,5,7:31)] %>% 
   mutate_all(myztransform)
 
-write_csv(train_dta_z_transform, '4.train_dta_z_transform.csv')
-write_csv(test_dta_z_transform,  '4.test_dta_z_transform.csv')
+write_csv(train_dta_z_transform, 'data/Feature Engineered Files/4.train_dta_z_transform.csv')
+write_csv(test_dta_z_transform,  'data/Feature Engineered Files/4.test_dta_z_transform.csv')
 
 # ---------
 
@@ -348,8 +348,8 @@ test_dta_z_transform_per_hosp_type[,c(3:5,7:31)] <-
   group_by(instkind) %>% 
   mutate_all(myztransform)
 
-write_csv(train_dta_z_transform_per_hosp_type, '5.train_dta_z_transform_per_hosp_type.csv')
-write_csv(test_dta_z_transform_per_hosp_type,  '5.test_dta_z_transform_per_hosp_type.csv')
+write_csv(train_dta_z_transform_per_hosp_type, 'data/Feature Engineered Files/5.train_dta_z_transform_per_hosp_type.csv')
+write_csv(test_dta_z_transform_per_hosp_type,  'data/Feature Engineered Files/5.test_dta_z_transform_per_hosp_type.csv')
 
 # --------------------------------------
 # --------------------------------------
@@ -432,8 +432,8 @@ test_dta_log_num_a[,c(3:29)] <-
   test_dta_log_num_a[,c(3:29)] %>% 
   mutate_all(mylog)
 
-write_csv(train_dta_log_num_a, '6a.train_dta_log_num.csv')
-write_csv(test_dta_log_num_a,  '6a.test_dta_log_num.csv')
+write_csv(train_dta_log_num_a, 'data/Feature Engineered Files/6a.train_dta_log_num.csv')
+write_csv(test_dta_log_num_a,  'data/Feature Engineered Files/6a.test_dta_log_num.csv')
 
 # ---------
 
@@ -448,8 +448,8 @@ test_dta_min_max_a[,c(3:29)] <-
   test_dta_min_max_a[,c(3:29)] %>% 
   mutate_all(myminmax)
 
-write_csv(train_dta_min_max_a, '7a.train_dta_min_max.csv')
-write_csv(test_dta_min_max_a,  '7a.test_dta_min_max.csv')
+write_csv(train_dta_min_max_a, 'data/Feature Engineered Files/7a.train_dta_min_max.csv')
+write_csv(test_dta_min_max_a,  'data/Feature Engineered Files/7a.test_dta_min_max.csv')
 
 # ---------
 
@@ -464,8 +464,8 @@ test_dta_log_num_min_max_a[,c(3:29)] <-
   test_dta_log_num_min_max_a[,c(3:29)] %>% 
   mutate_all(mylognumminmax)
 
-write_csv(train_dta_log_num_min_max_a, '8a.train_dta_log_num_min_max.csv')
-write_csv(test_dta_log_num_min_max_a,  '8a.test_dta_log_num_min_max.csv')
+write_csv(train_dta_log_num_min_max_a, 'data/Feature Engineered Files/8a.train_dta_log_num_min_max.csv')
+write_csv(test_dta_log_num_min_max_a,  'data/Feature Engineered Files/8a.test_dta_log_num_min_max.csv')
 
 # ---------
 
@@ -480,8 +480,8 @@ test_dta_z_transform_a[,c(3:29)] <-
   test_dta_z_transform_a[,c(3:29)] %>% 
   mutate_all(myztransform)
 
-write_csv(train_dta_z_transform_a, '9a.train_dta_z_transform.csv')
-write_csv(test_dta_z_transform_a,  '9a.test_dta_z_transform.csv')
+write_csv(train_dta_z_transform_a, 'data/Feature Engineered Files/9a.train_dta_z_transform.csv')
+write_csv(test_dta_z_transform_a,  'data/Feature Engineered Files/9a.test_dta_z_transform.csv')
 
 # ---------
 
@@ -506,8 +506,8 @@ test_dta_z_transform_per_hosp_type_a <-
   test_dta_z_transform_per_hosp_type_a %>% 
   select(-instkind)
 
-write_csv(train_dta_z_transform_per_hosp_type_a, '10a.train_dta_z_transform_per_hosp_type.csv')
-write_csv(test_dta_z_transform_per_hosp_type_a,  '10a.test_dta_z_transform_per_hosp_type.csv')
+write_csv(train_dta_z_transform_per_hosp_type_a, 'data/Feature Engineered Files/10a.train_dta_z_transform_per_hosp_type.csv')
+write_csv(test_dta_z_transform_per_hosp_type_a,  'data/Feature Engineered Files/10a.test_dta_z_transform_per_hosp_type.csv')
 
 # --------------------------------------
 # --------------------------------------
@@ -522,36 +522,36 @@ train_dta_log_num_b <- train_dta_log_num_a
 test_dta_log_num_b <- test_dta_log_num_a
 train_dta_log_num_b[3:29] <- mysquare(train_dta_log_num_b[3:29])
 test_dta_log_num_b[3:29] <- mysquare(test_dta_log_num_b[3:29])
-write_csv(train_dta_log_num_b, '6b.train_dta_log_num.csv')
-write_csv(test_dta_log_num_b,  '6b.test_dta_log_num.csv')
+write_csv(train_dta_log_num_b, 'data/Feature Engineered Files/6b.train_dta_log_num.csv')
+write_csv(test_dta_log_num_b,  'data/Feature Engineered Files/6b.test_dta_log_num.csv')
 
 train_dta_min_max_b <- train_dta_min_max_a
 test_dta_min_max_b <- test_dta_min_max_a
 train_dta_min_max_b[3:29] <- mysquare(train_dta_min_max_b[3:29])
 test_dta_min_max_b[3:29] <- mysquare(test_dta_min_max_b[3:29])
-write_csv(train_dta_min_max_b, '7b.train_dta_min_max.csv')
-write_csv(test_dta_min_max_b,  '7b.test_dta_min_max.csv')
+write_csv(train_dta_min_max_b, 'data/Feature Engineered Files/7b.train_dta_min_max.csv')
+write_csv(test_dta_min_max_b,  'data/Feature Engineered Files/7b.test_dta_min_max.csv')
 
 train_dta_log_num_min_max_b <- train_dta_log_num_min_max_a
 test_dta_log_num_min_max_b <- test_dta_log_num_min_max_a
 train_dta_log_num_min_max_b[3:29] <- mysquare(train_dta_log_num_min_max_b[3:29])
 test_dta_log_num_min_max_b[3:29] <- mysquare(test_dta_log_num_min_max_b[3:29])
-write_csv(train_dta_log_num_min_max_b, '8b.train_dta_log_num_min_max.csv')
-write_csv(test_dta_log_num_min_max_b,  '8b.test_dta_log_num_min_max.csv')
+write_csv(train_dta_log_num_min_max_b, 'data/Feature Engineered Files/8b.train_dta_log_num_min_max.csv')
+write_csv(test_dta_log_num_min_max_b,  'data/Feature Engineered Files/8b.test_dta_log_num_min_max.csv')
 
 train_dta_z_transform_b <- train_dta_z_transform_a
 test_dta_z_transform_b <- test_dta_z_transform_a
 train_dta_z_transform_b[3:29] <- mysquare(train_dta_z_transform_b[3:29])
 test_dta_z_transform_b[3:29] <- mysquare(test_dta_z_transform_b[3:29])
-write_csv(train_dta_z_transform_b, '9b.train_dta_z_transform.csv')
-write_csv(test_dta_z_transform_b,  '9b.test_dta_z_transform.csv')
+write_csv(train_dta_z_transform_b, 'data/Feature Engineered Files/9b.train_dta_z_transform.csv')
+write_csv(test_dta_z_transform_b,  'data/Feature Engineered Files/9b.test_dta_z_transform.csv')
 
 train_dta_z_transform_per_hosp_type_b <- train_dta_z_transform_per_hosp_type_a
 test_dta_z_transform_per_hosp_type_b <- test_dta_z_transform_per_hosp_type_a
 train_dta_z_transform_per_hosp_type_b[3:29] <- mysquare(train_dta_z_transform_per_hosp_type_b[3:29])
 test_dta_z_transform_per_hosp_type_b[3:29] <- mysquare(test_dta_z_transform_per_hosp_type_b[3:29])
-write_csv(train_dta_z_transform_per_hosp_type_b, '10b.train_dta_z_transform_per_hosp_type.csv')
-write_csv(test_dta_z_transform_per_hosp_type_b,  '10b.test_dta_z_transform_per_hosp_type.csv')
+write_csv(train_dta_z_transform_per_hosp_type_b, 'data/Feature Engineered Files/10b.train_dta_z_transform_per_hosp_type.csv')
+write_csv(test_dta_z_transform_per_hosp_type_b,  'data/Feature Engineered Files/10b.test_dta_z_transform_per_hosp_type.csv')
 
 # --------------------------------------
 # --------------------------------------
@@ -566,36 +566,36 @@ train_dta_log_num_c <- train_dta_log_num_a
 test_dta_log_num_c <- test_dta_log_num_a
 train_dta_log_num_c[3:29] <- mysqrt(train_dta_log_num_c[3:29])
 test_dta_log_num_c[3:29] <- mysqrt(test_dta_log_num_c[3:29])
-write_csv(train_dta_log_num_c, '6c.train_dta_log_num.csv')
-write_csv(test_dta_log_num_c,  '6c.test_dta_log_num.csv')
+write_csv(train_dta_log_num_c, 'data/Feature Engineered Files/6c.train_dta_log_num.csv')
+write_csv(test_dta_log_num_c,  'data/Feature Engineered Files/6c.test_dta_log_num.csv')
 
 train_dta_min_max_c <- train_dta_min_max_a
 test_dta_min_max_c <- test_dta_min_max_a
 train_dta_min_max_c[3:29] <- mysqrt(train_dta_min_max_c[3:29])
 test_dta_min_max_c[3:29] <- mysqrt(test_dta_min_max_c[3:29])
-write_csv(train_dta_min_max_c, '7c.train_dta_min_max.csv')
-write_csv(test_dta_min_max_c,  '7c.test_dta_min_max.csv')
+write_csv(train_dta_min_max_c, 'data/Feature Engineered Files/7c.train_dta_min_max.csv')
+write_csv(test_dta_min_max_c,  'data/Feature Engineered Files/7c.test_dta_min_max.csv')
 
 train_dta_log_num_min_max_c <- train_dta_log_num_min_max_a
 test_dta_log_num_min_max_c <- test_dta_log_num_min_max_a
 train_dta_log_num_min_max_c[3:29] <- mysqrt(train_dta_log_num_min_max_c[3:29])
 test_dta_log_num_min_max_c[3:29] <- mysqrt(test_dta_log_num_min_max_c[3:29])
-write_csv(train_dta_log_num_min_max_c, '8c.train_dta_log_num_min_max.csv')
-write_csv(test_dta_log_num_min_max_c,  '8c.test_dta_log_num_min_max.csv')
+write_csv(train_dta_log_num_min_max_c, 'data/Feature Engineered Files/8c.train_dta_log_num_min_max.csv')
+write_csv(test_dta_log_num_min_max_c,  'data/Feature Engineered Files/8c.test_dta_log_num_min_max.csv')
 
 train_dta_z_transform_c <- train_dta_z_transform_a
 test_dta_z_transform_c <- test_dta_z_transform_a
 train_dta_z_transform_c[3:29] <- mysqrt(train_dta_z_transform_c[3:29])
 test_dta_z_transform_c[3:29] <- mysqrt(test_dta_z_transform_c[3:29])
-write_csv(train_dta_z_transform_c, '9c.train_dta_z_transform.csv')
-write_csv(test_dta_z_transform_c,  '9c.test_dta_z_transform.csv')
+write_csv(train_dta_z_transform_c, 'data/Feature Engineered Files/9c.train_dta_z_transform.csv')
+write_csv(test_dta_z_transform_c,  'data/Feature Engineered Files/9c.test_dta_z_transform.csv')
 
 train_dta_z_transform_per_hosp_type_c <- train_dta_z_transform_per_hosp_type_a
 test_dta_z_transform_per_hosp_type_c <- test_dta_z_transform_per_hosp_type_a
 train_dta_z_transform_per_hosp_type_c[3:29] <- mysqrt(train_dta_z_transform_per_hosp_type_c[3:29])
 test_dta_z_transform_per_hosp_type_c[3:29] <- mysqrt(test_dta_z_transform_per_hosp_type_c[3:29])
-write_csv(train_dta_z_transform_per_hosp_type_c, '10c.train_dta_z_transform_per_hosp_type.csv')
-write_csv(test_dta_z_transform_per_hosp_type_c,  '10c.test_dta_z_transform_per_hosp_type.csv')
+write_csv(train_dta_z_transform_per_hosp_type_c, 'data/Feature Engineered Files/10c.train_dta_z_transform_per_hosp_type.csv')
+write_csv(test_dta_z_transform_per_hosp_type_c,  'data/Feature Engineered Files/10c.test_dta_z_transform_per_hosp_type.csv')
 
 # --------------------------------------
 # --------------------------------------

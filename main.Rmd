@@ -37,8 +37,8 @@ library(ggcorrplot)
 Next, we load the data from their respective files.
 
 ```{r, message=FALSE}
-train_dta <- read_csv("train.csv", col_names = TRUE, trim_ws = TRUE)  # load training data
-test_dta  <- read_csv("test.csv",  col_names = TRUE, trim_ws = TRUE)  # load testing data
+train_dta <- read_csv("data/train.csv", col_names = TRUE, trim_ws = TRUE)  # load training data
+test_dta  <- read_csv("data/test.csv",  col_names = TRUE, trim_ws = TRUE)  # load testing data
 ```
 
 Let's inspect the data!
