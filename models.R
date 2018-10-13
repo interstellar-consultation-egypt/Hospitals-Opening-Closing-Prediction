@@ -6,8 +6,8 @@ library(caret)
 #########################
 # Base Model (no pca)
 ########################
-train <- read.csv("4.train_dta_z_transform.csv")
-
+train <- read.csv("6a.train_dta_log_num.csv")
+h2o.init()
 # Feature Selection
 base.mod <- lm( as.numeric(OC) ~ 1 , data = train)  # base intercept only model
 all.mod <- lm( as.numeric(OC) ~ . , data = train) # full model with all predictors
@@ -33,10 +33,10 @@ summary(stepMod)
 #############################################################
 glimpse(train)
 debt3_idx <- grep("debt3", colnames(train))
-train.pca <- prcomp(train[, -c(1:2, 4, 6, debt3_idx)], center = TRUE, scale. = TRUE)
+train.pca <- prcomp(train[, -c(1:2, debt3_idx)], center = TRUE, scale. = TRUE)
 summary(train.pca)
 ggbiplot(train.pca)
-train.new <- train.pca$x[, 1:26] # explains 100% of data
+train.new <- train.pca$x[, 1:34] # explains 100% of data
 train.new <- as.tibble(train.new)
 
 # add factor data
@@ -61,9 +61,9 @@ shortlistedVars <-
 print(shortlistedVars)
 summary(stepMod)
 
-y.dep <- 29
-#x.indep <- c(6, 9, 11, 14, 15, 18, 20, 22:25, 28)
-x.indep <- c(1:28)
+y.dep <- 35
+x.indep <- c(19, 30)
+#x.indep <- c(1:34)
 ntrees_opt <- c(400, 600, 800, 1000, 1200)
 maxdepth_opt <- c(6, 8, 10, 12, 14, 16)
 hyper_parameters <- list(
@@ -80,20 +80,20 @@ regression.model <- h2o.glm( y = y.dep, x = x.indep, training_frame = as.h2o(tra
 h2o.performance(regression.model)
 
 # test date
-test <- read.csv("4.test_dta_z_transform.csv")
+test <- read.csv("6a.test_dta_log_num.csv")
 glimpse(test)
 debt3_idx <- grep("debt3", colnames(test))
-test.pca <- prcomp(test[, -c(1:2, 4, 6, debt3_idx)], center = TRUE, scale. = TRUE)
+test.pca <- prcomp(test[, -c(1:2, debt3_idx)], center = TRUE, scale. = TRUE)
 summary(test.pca)
 ggbiplot(test.pca)
-test.new <- test.pca$x[,1:26] # explains 90% of data
+test.new <- test.pca$x[,1:34] # explains 90% of data
 test.new <- as.tibble(test.new)
 
 # add factor data
-test.new$instkind <- as.numeric(test$instkind)
-test.new$ownerChange <- as.numeric(test$ownerChange)
+# test.new$instkind <- as.numeric(test$instkind)
+# test.new$ownerChange <- as.numeric(test$ownerChange)
 test.new$OC <- test$OC
-h2o.init()
+# h2o.init()
 predict.reg <- as.data.frame(h2o.predict(regression.model, as.h2o(test.new[, x.indep])))
 OC_reg <- data.frame(inst_id = test$inst_id, OC = as.numeric(predict.reg$predict)-1)
 write.csv(OC_reg, file = "OC_reg_5.csv", quote = FALSE, row.names=FALSE)
@@ -121,7 +121,7 @@ grid <- h2o.grid("randomForest",
                  ),
                  hyper_params = list(
                    ntrees = c(50, 100, 150, 200, 250),
-                   mtries = c(2, 3, 4, 5),
+                   #mtries = c(2, 3, 4, 5),
                    sample_rate = c(0.5, 0.632, 0.8, 0.95),
                    col_sample_rate_per_tree = c(0.5, 0.9, 1.0)
                  ),
@@ -133,7 +133,8 @@ grid <- h2o.grid("randomForest",
                  stopping_metric = "AUTO",
                  stopping_tolerance = 0,
                  stopping_rounds = 4,
-                 score_tree_interval = 3)
+                 score_tree_interval = 3,
+                 binomial_double_trees = TRUE)
 # print out all prediction errors and run times of the models
 grid
 
@@ -150,7 +151,7 @@ best_id <- model_ids[order(mse,decreasing=F)][1]
 best_id
 
 fit.best <- h2o.getModel(model_id = best_id[[1]])
-h2o.varimp(fit.best)
+h2o.performance(fit.best)
 
 system.time(predict.rforest <- as.data.frame(h2o.predict(fit.best, test.h2o)))
 OC_rf <- data.frame(inst_id = test$inst_id, OC = as.numeric(predict.rforest$predict) - 1)
